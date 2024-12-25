@@ -75,6 +75,37 @@ knife4j是为Java MVC框架集成Swagger生成Api文档的增强解决方案,前
 @Api	|用在类上，例如Controller，表示对类的说明
 @ApiModel	|用在类上，例如entity、DTO、VO
 @ApiModelProperty	|用在属性上，描述属性信息
-@ApiOperation	|用在方法上，例如Controller的方法，说明方法的用途、作用
+@ApiOperation	|用在方法上，例如Controller的方法，说明方法的用途、作用  
+
+# 2.需求分析和设计
+本项目约定：
+
+管理端发出的请求，统一使用**/admin**作为前缀。
+用户端发出的请求，统一使用**/user**作为前缀。  
+
+## 2.1新增员工
+新增员工，其实就是将我们新增页面录入的员工数据插入到employee表。
+
+employee表结构：
+
+
+| **字段名**  | **数据类型** | **说明**     | **备注**    |
+| ----------- | ------------ | ------------ | ----------- |
+| id          | bigint       | 主键         | 自增        |
+| name        | varchar(32)  | 姓名         |             |
+| username    | varchar(32)  | 用户名       | 唯一        |
+| password    | varchar(64)  | 密码         |             |
+| phone       | varchar(11)  | 手机号       |             |
+| sex         | varchar(2)   | 性别         |             |
+| id_number   | varchar(18)  | 身份证号     |             |
+| status      | Int          | 账号状态     | 1正常 0锁定 |
+| create_time | Datetime     | 创建时间     |             |
+| update_time | datetime     | 最后修改时间 |             |
+| create_user | bigint       | 创建人id     |             |
+| update_user | bigint       | 最后修改人id |             |
+
+其中，employee表中的status字段已经设置了默认值1，表示状态正常。
+
+
 
 
