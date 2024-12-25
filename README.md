@@ -50,8 +50,21 @@ SkyApplication|启动类
 后端的初始工程中已经实现了登录功能，直接进行前后端联调测试即可
 
 
-
 ### 1.3导入接口文档
-
+需要将接口文档导入到管理平台，为我们后面业务开发做好准备  
+将资料中提供的项目接口导入YApi
 
 ### 1.4 Swagger
+Swagger 是一个规范和完整的框架，用于生成、描述、调用和可视化 RESTful 风格的 Web 服务(https://swagger.io/)。 它的主要作用是：
+
+1.使得前后端分离开发更加方便，有利于团队协作
+
+2.接口的文档在线自动生成，降低后端开发人员编写接口文档的负担
+
+3.功能测试
+
+Spring已经将Swagger纳入自身的标准，建立了Spring-swagger项目，现在叫Springfox。通过在项目中引入Springfox ，即可非常简单快捷的使用Swagger。
+
+knife4j是为Java MVC框架集成Swagger生成Api文档的增强解决方案,前身是swagger-bootstrap-ui,取名kni4j是希望它能像一把匕首一样小巧,轻量,并且功能强悍!
+
+目前，一般都使用knife4j框架。
