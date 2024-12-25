@@ -63,8 +63,18 @@ Swagger 是一个规范和完整的框架，用于生成、描述、调用和可
 
 3.功能测试
 
-Spring已经将Swagger纳入自身的标准，建立了Spring-swagger项目，现在叫Springfox。通过在项目中引入Springfox ，即可非常简单快捷的使用Swagger。
-
+Spring已经将Swagger纳入自身的标准，建立了Spring-swagger项目，现在叫Springfox。通过在项目中引入Springfox ，即可非常简单快捷的使用Swagger。  
 knife4j是为Java MVC框架集成Swagger生成Api文档的增强解决方案,前身是swagger-bootstrap-ui,取名kni4j是希望它能像一把匕首一样小巧,轻量,并且功能强悍!
 
-目前，一般都使用knife4j框架。
+目前，一般都使用knife4j框架。  
+
+通过注解可以控制生成的接口文档，使接口文档拥有更好的可读性，常用注解如下：
+
+注解	|说明
+-|-
+@Api	|用在类上，例如Controller，表示对类的说明
+@ApiModel	|用在类上，例如entity、DTO、VO
+@ApiModelProperty	|用在属性上，描述属性信息
+@ApiOperation	|用在方法上，例如Controller的方法，说明方法的用途、作用
+
+
