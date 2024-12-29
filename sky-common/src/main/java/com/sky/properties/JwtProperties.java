@@ -10,7 +10,7 @@ import org.springframework.stereotype.Component;
 public class JwtProperties {
 
     /**
-     * 管理端员工生成jwt令牌相关配置
+     * 管理端员工生成jwt令牌相关配置，通过配置属性类的方式在yml文件中配置
      */
     private String adminSecretKey;
     private long adminTtl;
