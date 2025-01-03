@@ -105,4 +105,22 @@ public class EmployeeServiceImpl implements EmployeeService {
 
       return new PageResult(total,records);
     }
+
+    /**
+     * 启用禁用员工账号
+     * @param status
+     * @param id
+     */
+    public void startOrStop(Integer status, Long id) {
+        // 使用 Employee 的构建器模式创建一个新的 Employee 对象
+        Employee employee = Employee.builder()
+                // 设置员工的状态 (例如: 在职、离职等)
+                .status(status)
+                // 设置员工的唯一标识符 (ID)
+                .id(id)
+                // 构建并返回 Employee 对象
+                .build();
+
+        employeeMapper.update(employee);
+    }
 }
