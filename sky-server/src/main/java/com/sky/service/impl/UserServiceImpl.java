@@ -81,4 +81,6 @@ public class UserServiceImpl implements UserService {
         String openid = jsonObject.getString("openid");
         return openid;
     }
+
+
 }
