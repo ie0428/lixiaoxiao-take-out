@@ -62,7 +62,7 @@ public interface OrderMapper {
     List<Orders> getByStatusAndOrdertimeLT(Integer status, LocalDateTime orderTime);
 
     /**
-     * 根据动态条件统计订单数量
+     * 根据动态条件统计营业额
      * @param map
      */
     Double sumByMap(Map map);

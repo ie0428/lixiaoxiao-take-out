@@ -16,6 +16,7 @@ import com.sky.mapper.*;
 import com.sky.result.PageResult;
 import com.sky.service.OrderService;
 import com.sky.utils.WeChatPayUtil;
+import com.sky.utils.WeChatPayUtilTrue;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
@@ -24,7 +25,6 @@ import com.sky.webSocket.WebSocketServer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.BeanUtils;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -122,28 +122,31 @@ public class OrderServiceImpl implements OrderService {
      * @param ordersPaymentDTO
      * @return
      */
-    public OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception {
-        // 当前登录用户id
-        Long userId = BaseContext.getCurrentId();
-        User user = userMapper.getById(userId);
 
-        //调用微信支付接口，生成预支付交易单
-        JSONObject jsonObject = weChatPayUtil.pay(
-                ordersPaymentDTO.getOrderNumber(), //商户订单号
-                new BigDecimal(0.01), //支付金额，单位 元
-                "苍穹外卖订单", //商品描述
-                user.getOpenid() //微信用户的openid
-        );
+        /**
+         * 订单支付（直接模拟成功）
+         */
+        public OrderPaymentVO payment(OrdersPaymentDTO ordersPaymentDTO) throws Exception {
+            // 当前登录用户id
+            Long userId = BaseContext.getCurrentId();
+            User user = userMapper.getById(userId);
+            // 调用模拟支付接口
+            JSONObject jsonObject = weChatPayUtil.pay(
+                    ordersPaymentDTO.getOrderNumber(),
+                    new BigDecimal("0.01"),
+                    "苍穹外卖订单",
+                    user.getOpenid()
+            );
 
-        if (jsonObject.getString("code") != null && jsonObject.getString("code").equals("ORDERPAID")) {
-            throw new OrderBusinessException("该订单已支付");
+            // 直接返回支付参数给前端（无需立即更新订单状态）
+            OrderPaymentVO vo = new OrderPaymentVO();
+            vo.setTimeStamp(jsonObject.getString("timeStamp"));
+            vo.setNonceStr(jsonObject.getString("nonceStr"));
+            vo.setPackageStr(jsonObject.getString("package"));
+            vo.setSignType(jsonObject.getString("signType"));
+            vo.setPaySign(jsonObject.getString("paySign"));
+            return vo;
         }
-
-        OrderPaymentVO vo = jsonObject.toJavaObject(OrderPaymentVO.class);
-        vo.setPackageStr(jsonObject.getString("package"));
-
-        return vo;
-    }
 
     /**
      * 支付成功，修改订单状态
@@ -260,22 +263,13 @@ public class OrderServiceImpl implements OrderService {
         Orders orders = new Orders();
         orders.setId(ordersDB.getId());
 
-        // 订单处于待接单状态下取消，需要进行退款
-        if (ordersDB.getStatus().equals(Orders.TO_BE_CONFIRMED)) {
-            //调用微信支付退款接口
-            try {
-                weChatPayUtil.refund(
-                        ordersDB.getNumber(), //商户订单号
-                        ordersDB.getNumber(), //商户退款单号
-                        new BigDecimal(0.01),//退款金额，单位 元
-                        new BigDecimal(0.01));//原订单金额
-            } catch (Exception e) {
-                throw new RuntimeException(e);
-            }
+        // 直接更新订单状态为退款
 
-            //支付状态修改为 退款
-            orders.setPayStatus(Orders.REFUND);
-        }
+        orders.setStatus(Orders.CANCELLED);
+        orders.setPayStatus(Orders.REFUND);
+        orders.setCancelReason("用户取消");
+        orders.setCancelTime(LocalDateTime.now());
+        orderMapper.update(orders);
 
         // 更新订单状态、取消原因、取消时间
         orders.setStatus(Orders.CANCELLED);
@@ -411,30 +405,12 @@ public class OrderServiceImpl implements OrderService {
         // 根据id查询订单
         Orders ordersDB = orderMapper.getById(ordersRejectionDTO.getId());
 
-        // 订单只有存在且状态为2（待接单）才可以拒单
-        if (ordersDB == null || !ordersDB.getStatus().equals(Orders.TO_BE_CONFIRMED)) {
-            throw new OrderBusinessException(MessageConstant.ORDER_STATUS_ERROR);
-        }
-
-        //支付状态
-        Integer payStatus = ordersDB.getPayStatus();
-        if (payStatus == Orders.PAID) {
-            //用户已支付，需要退款
-            String refund = weChatPayUtil.refund(
-                    ordersDB.getNumber(),
-                    ordersDB.getNumber(),
-                    new BigDecimal(0.01),
-                    new BigDecimal(0.01));
-            log.info("申请退款：{}", refund);
-        }
-
-        // 拒单需要退款，根据订单id更新订单状态、拒单原因、取消时间
+        // 直接更新订单状态为取消
         Orders orders = new Orders();
         orders.setId(ordersDB.getId());
         orders.setStatus(Orders.CANCELLED);
         orders.setRejectionReason(ordersRejectionDTO.getRejectionReason());
         orders.setCancelTime(LocalDateTime.now());
-
         orderMapper.update(orders);
     }
 
@@ -447,19 +423,7 @@ public class OrderServiceImpl implements OrderService {
         // 根据id查询订单
         Orders ordersDB = orderMapper.getById(ordersCancelDTO.getId());
 
-        //支付状态
-        Integer payStatus = ordersDB.getPayStatus();
-        if (payStatus == 1) {
-            //用户已支付，需要退款
-            String refund = weChatPayUtil.refund(
-                    ordersDB.getNumber(),
-                    ordersDB.getNumber(),
-                    new BigDecimal(0.01),
-                    new BigDecimal(0.01));
-            log.info("申请退款：{}", refund);
-        }
-
-        // 管理端取消订单需要退款，根据订单id更新订单状态、取消原因、取消时间
+        // 直接更新订单状态为取消
         Orders orders = new Orders();
         orders.setId(ordersCancelDTO.getId());
         orders.setStatus(Orders.CANCELLED);
