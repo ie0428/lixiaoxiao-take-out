@@ -38,30 +38,39 @@ public class ReportServiceImpl implements ReportService {
      * @return
      */
     public TurnoverReportVO getTurnover(LocalDate begin, LocalDate end) {
-        List<LocalDate> dateList = getDateRange(begin, end);
-        List<Double> turnoverList = new ArrayList<>();
-        for (LocalDate date : dateList){
-            LocalDateTime beginTime = LocalDateTime.of(date, LocalTime.MIN);
-            LocalDateTime endTime = LocalDateTime.of(date, LocalTime.MAX);
-            Map map=new HashMap<>();
-            map.put("beginTime",beginTime);
-            map.put("endTime",endTime);
-            map.put("status",4);
-            Double turnover = orderMapper.sumByMap(map);
-            turnoverList.add(turnover);
-            turnover=turnover==null?0.0:turnover;
+        List<LocalDate> dateList = new ArrayList<>();
+        dateList.add(begin);
+
+        while (!begin.equals(end)){
+            begin = begin.plusDays(1);//日期计算，获得指定日期后1天的日期
+            dateList.add(begin);
         }
 
-        //数据结构
+        List<Double> turnoverList = new ArrayList<>();
+        for (LocalDate date : dateList) {
+            LocalDateTime beginTime = LocalDateTime.of(date, LocalTime.MIN);
+            LocalDateTime endTime = LocalDateTime.of(date, LocalTime.MAX);
+            Map map = new HashMap();
+            map.put("status", Orders.COMPLETED);
+            map.put("begin",beginTime);
+            map.put("end", endTime);
+            Double turnover = orderMapper.sumByMap(map);
+            turnover = turnover == null ? 0.0 : turnover;
+            turnoverList.add(turnover);
+        }
+
+        //数据封装
         return TurnoverReportVO.builder()
                 .dateList(StringUtils.join(dateList,","))
                 .turnoverList(StringUtils.join(turnoverList,","))
                 .build();
     }
 
+
     public UserReportVO getUserStatistics(LocalDate begin, LocalDate end) {
 
         List<LocalDate> dateList = getDateRange(begin, end);//日期列表
+
         List<Integer> newUserList = new ArrayList<>(); //新增用户数
         List<Integer> totalUserList = new ArrayList<>(); //总用户数
 
@@ -92,8 +101,8 @@ public class ReportServiceImpl implements ReportService {
      */
     private Integer getUserCount(LocalDateTime beginTime, LocalDateTime endTime) {
         Map map = new HashMap();
-        map.put("beginTime",beginTime);
-        map.put("endTime", endTime);
+        map.put("begin",beginTime);
+        map.put("end", endTime);
         return userMapper.countByMap(map);
 
     }
@@ -155,8 +164,8 @@ public class ReportServiceImpl implements ReportService {
     private Integer getOrderCount(LocalDateTime beginTime, LocalDateTime endTime, Integer status) {
         Map map = new HashMap();
         map.put("status", status);
-        map.put("beginTime",beginTime);
-        map.put("endTime", endTime);
+        map.put("begin",beginTime);
+        map.put("end", endTime);
         return orderMapper.countByMap(map);
     }
 
@@ -169,9 +178,10 @@ public class ReportServiceImpl implements ReportService {
      */
      private List<LocalDate> getDateRange(LocalDate begin, LocalDate end) {
         List<LocalDate> dateList = new ArrayList<>();
+        dateList.add(begin);
         while (!begin.isAfter(end)) {
-            dateList.add(begin);
             begin = begin.plusDays(1);
+            dateList.add(begin);
         }
 
         return dateList;
@@ -183,20 +193,18 @@ public class ReportServiceImpl implements ReportService {
      * @param end
      * @return
      * */
-    public SalesTop10ReportVO getSalesTop10(LocalDate begin, LocalDate end) {
+    public SalesTop10ReportVO getSalesTop10(LocalDate begin, LocalDate end){
         LocalDateTime beginTime = LocalDateTime.of(begin, LocalTime.MIN);
         LocalDateTime endTime = LocalDateTime.of(end, LocalTime.MAX);
         List<GoodsSalesDTO> goodsSalesDTOList = orderMapper.getSalesTop10(beginTime, endTime);
 
-        //提取出name和number
-        String nameList = StringUtils.join(goodsSalesDTOList.stream().map(GoodsSalesDTO::getNumber).collect(Collectors.toList()));
-        String numberList = StringUtils.join(goodsSalesDTOList.stream().map(GoodsSalesDTO::getName).collect(Collectors.toList()));
+        String nameList = StringUtils.join(goodsSalesDTOList.stream().map(GoodsSalesDTO::getName).collect(Collectors.toList()),",");
+        String numberList = StringUtils.join(goodsSalesDTOList.stream().map(GoodsSalesDTO::getNumber).collect(Collectors.toList()),",");
 
         return SalesTop10ReportVO.builder()
                 .nameList(nameList)
                 .numberList(numberList)
                 .build();
-
     }
 }
 
