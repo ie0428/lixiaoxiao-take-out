@@ -16,7 +16,6 @@ import com.sky.mapper.*;
 import com.sky.result.PageResult;
 import com.sky.service.OrderService;
 import com.sky.utils.WeChatPayUtil;
-import com.sky.utils.WeChatPayUtilTrue;
 import com.sky.vo.OrderPaymentVO;
 import com.sky.vo.OrderStatisticsVO;
 import com.sky.vo.OrderSubmitVO;
@@ -35,6 +34,8 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
+import java.time.LocalDate;
+import java.util.Collections;
 
 @Service
 @Slf4j
@@ -190,9 +191,15 @@ public class OrderServiceImpl implements OrderService {
      * @return
      */
     public PageResult pageQuery4User(int pageNum, int pageSize, Integer status) {
-        // 设置分页
+        // 限制最大分页大小
+        int safePageSize = Math.min(pageSize, 1000);
+        List<Orders> orders = Collections.synchronizedList(new ArrayList<>(safePageSize));
+        // 添加分页参数校验
+        if (pageSize > 1000) {
+            throw new OrderBusinessException("单次查询数据量过大");
+        }
         PageHelper.startPage(pageNum, pageSize);
-
+    
         OrdersPageQueryDTO ordersPageQueryDTO = new OrdersPageQueryDTO();
         ordersPageQueryDTO.setUserId(BaseContext.getCurrentId());
         ordersPageQueryDTO.setStatus(status);
@@ -204,9 +211,8 @@ public class OrderServiceImpl implements OrderService {
 
         // 查询出订单明细，并封装入OrderVO进行响应
         if (page != null && page.getTotal() > 0) {
-            for (Orders orders : page) {
-                Long orderId = orders.getId();// 订单id
-
+            for (Orders order : page) {
+                Long orderId = order.getId();// 订单id
                 // 查询订单明细
                 List<OrderDetail> orderDetails = orderDetailMapper.getByOrderId(orderId);
 
@@ -219,7 +225,29 @@ public class OrderServiceImpl implements OrderService {
         }
         return new PageResult(page.getTotal(), list);
     }
+    
 
+    public void exportOrders(LocalDate date) {
+        int page = 1;
+        int pageSize = 500;
+        
+        while (true) {
+            PageHelper.startPage(page, pageSize);
+            List<Orders> orders = orderMapper.selectByDate(date);
+            if (orders.isEmpty()) break;
+            
+            processBatch(orders); // 分批处理
+            PageHelper.clearPage();
+            page++;
+        }
+    }
+    private void processBatch(List<Orders> orders) {
+        // 这里可以添加具体的处理逻辑，例如打印订单信息
+        for (Orders order : orders) {
+            log.info("Processing order: {}", order);
+        }
+    }
+   
     /**
      * 查询订单详情
      *

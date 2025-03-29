@@ -8,6 +8,9 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.extern.slf4j.Slf4j;
 import java.io.ByteArrayInputStream;
+import java.lang.ref.SoftReference;
+import java.util.Map;
+import java.util.concurrent.ConcurrentHashMap;
 
 @Data
 @AllArgsConstructor
@@ -26,7 +29,13 @@ public class AliOssUtil {
      * @param objectName
      * @return
      */
+    // 添加弱引用缓存（建议最大缓存50个文件）
+    private static final Map<String, SoftReference<byte[]>> FILE_CACHE = 
+        new ConcurrentHashMap<>(50);
+
     public String upload(byte[] bytes, String objectName) {
+        // 添加缓存逻辑
+        FILE_CACHE.put(objectName, new SoftReference<>(bytes));
 
         // 创建OSSClient实例。
         OSS ossClient = new OSSClientBuilder().build(endpoint, accessKeyId, accessKeySecret);
@@ -64,5 +73,11 @@ public class AliOssUtil {
         log.info("文件上传到:{}", stringBuilder.toString());
 
         return stringBuilder.toString();
+    }
+    
+    // 添加缓存获取方法
+    public byte[] getCachedFile(String objectName) {
+        SoftReference<byte[]> ref = FILE_CACHE.get(objectName);
+        return ref != null ? ref.get() : null;
     }
 }
