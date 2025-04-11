@@ -36,6 +36,8 @@ import java.util.Map;
 import java.util.stream.Collectors;
 import java.time.LocalDate;
 import java.util.Collections;
+import org.springframework.data.redis.core.RedisTemplate;
+import java.util.concurrent.TimeUnit;
 
 @Service
 @Slf4j
@@ -54,68 +56,88 @@ public class OrderServiceImpl implements OrderService {
     private WeChatPayUtil weChatPayUtil;
     @Autowired
     private WebSocketServer webSocketServer;
-
-    //用户下单
-
+    // 在类顶部添加
+    @Autowired
+    private RedisTemplate<String, String> redisTemplate; // 使用String类型模板
+    
+    /**
+     * 用户下单
+     * @param ordersSubmitDTO
+     * @return
+     */
     @Transactional
     public OrderSubmitVO submit(OrdersSubmitDTO ordersSubmitDTO) {
-        //异常情况的处理（收货地址为空，超出配送范围，购物车为空）
-
-        //1.查询当前用户的收货地址
-        AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
-        if (addressBook == null) {
-            throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
-        }
-
-        //2.查询当前用户的购物车数据
         Long userId = BaseContext.getCurrentId();
-        ShoppingCart shoppingCart = new ShoppingCart();
-        shoppingCart.setUserId(userId);
-
-        List<ShoppingCart> shoppingCartList = shoppingCartMapper.list(shoppingCart);
-        if (shoppingCartList == null || shoppingCartList.isEmpty()) {
-            throw new ShoppingCartBusinessException(MessageConstant.SHOPPING_CART_IS_NULL);
+        String lockKey = "order:lock:" + userId;
+        
+        try {
+            // 尝试获取锁（设置3秒自动过期）
+            Boolean locked = redisTemplate.opsForValue().setIfAbsent(lockKey, "locked", 3, TimeUnit.SECONDS);
+            if (Boolean.FALSE.equals(locked)) {
+                throw new OrderBusinessException("请勿重复提交订单");
+            }
+    
+            //异常情况的处理（收货地址为空，超出配送范围，购物车为空）
+            //1.查询当前用户的收货地址
+            AddressBook addressBook = addressBookMapper.getById(ordersSubmitDTO.getAddressBookId());
+            if (addressBook == null) {
+                throw new AddressBookBusinessException(MessageConstant.ADDRESS_BOOK_IS_NULL);
+            }
+    
+            //2.查询当前用户的购物车数据
+        
+            ShoppingCart shoppingCart = new ShoppingCart();
+            shoppingCart.setUserId(userId);
+    
+            List<ShoppingCart> shoppingCartList = shoppingCartMapper.list(shoppingCart);
+            if (shoppingCartList == null || shoppingCartList.isEmpty()) {
+                throw new ShoppingCartBusinessException(MessageConstant.SHOPPING_CART_IS_NULL);
+            }
+    
+            //构造订单数据
+            Orders order = new Orders();
+            BeanUtils.copyProperties(ordersSubmitDTO, order);
+            order.setPhone(addressBook.getPhone());
+            order.setAddress(addressBook.getDetail());
+            order.setConsignee(addressBook.getConsignee());
+            order.setNumber(String.valueOf(System.currentTimeMillis()));
+            order.setUserId(userId);
+            order.setStatus(Orders.PENDING_PAYMENT);
+            order.setPayStatus(Orders.UN_PAID);
+            order.setOrderTime(LocalDateTime.now());
+    
+            //向订单表插入一条数据
+            orderMapper.insert(order);
+    
+    
+            List<OrderDetail> orderDetailList = new ArrayList<>();
+            for (ShoppingCart cart : shoppingCartList) {
+                OrderDetail orderDetail = new OrderDetail();
+                BeanUtils.copyProperties(cart, orderDetail);
+                orderDetail.setOrderId(order.getId());
+                orderDetailList.add(orderDetail);
+            }
+    
+            //向明细表插入n条数据
+            orderDetailMapper.insertBatch(orderDetailList);
+    
+            //清空购物车
+            shoppingCartMapper.deleteById(userId);
+    
+            //封装vo对象
+            OrderSubmitVO orderSubmitVO = OrderSubmitVO.builder()
+                    .id(order.getId())
+                    .orderNumber(order.getNumber())
+                    .orderAmount(order.getAmount())
+                    .orderTime(order.getOrderTime())
+                    .build();
+            return orderSubmitVO;
+    
+        } finally {
+            // 直接删除锁（因设置了自动过期，此处删除可省略）
+            redisTemplate.delete(lockKey);
         }
-
-        //构造订单数据
-        Orders order = new Orders();
-        BeanUtils.copyProperties(ordersSubmitDTO, order);
-        order.setPhone(addressBook.getPhone());
-        order.setAddress(addressBook.getDetail());
-        order.setConsignee(addressBook.getConsignee());
-        order.setNumber(String.valueOf(System.currentTimeMillis()));
-        order.setUserId(userId);
-        order.setStatus(Orders.PENDING_PAYMENT);
-        order.setPayStatus(Orders.UN_PAID);
-        order.setOrderTime(LocalDateTime.now());
-
-        //向订单表插入一条数据
-        orderMapper.insert(order);
-
-
-        List<OrderDetail> orderDetailList = new ArrayList<>();
-        for (ShoppingCart cart : shoppingCartList) {
-            OrderDetail orderDetail = new OrderDetail();
-            BeanUtils.copyProperties(cart, orderDetail);
-            orderDetail.setOrderId(order.getId());
-            orderDetailList.add(orderDetail);
-        }
-
-        //向明细表插入n条数据
-        orderDetailMapper.insertBatch(orderDetailList);
-
-        //清空购物车
-        shoppingCartMapper.deleteById(userId);
-
-        //封装vo对象
-        OrderSubmitVO orderSubmitVO = OrderSubmitVO.builder()
-                .id(order.getId())
-                .orderNumber(order.getNumber())
-                .orderAmount(order.getAmount())
-                .orderTime(order.getOrderTime())
-                .build();
-        return orderSubmitVO;
-
+        
     }
     /**
      * 订单支付
@@ -191,9 +213,7 @@ public class OrderServiceImpl implements OrderService {
      * @return
      */
     public PageResult pageQuery4User(int pageNum, int pageSize, Integer status) {
-        // 限制最大分页大小
-        int safePageSize = Math.min(pageSize, 1000);
-        List<Orders> orders = Collections.synchronizedList(new ArrayList<>(safePageSize));
+
         // 添加分页参数校验
         if (pageSize > 1000) {
             throw new OrderBusinessException("单次查询数据量过大");
@@ -217,7 +237,7 @@ public class OrderServiceImpl implements OrderService {
                 List<OrderDetail> orderDetails = orderDetailMapper.getByOrderId(orderId);
 
                 OrderVO orderVO = new OrderVO();
-                BeanUtils.copyProperties(orders, orderVO);
+                BeanUtils.copyProperties(order, orderVO);
                 orderVO.setOrderDetailList(orderDetails);
 
                 list.add(orderVO);
@@ -227,26 +247,6 @@ public class OrderServiceImpl implements OrderService {
     }
     
 
-    public void exportOrders(LocalDate date) {
-        int page = 1;
-        int pageSize = 500;
-        
-        while (true) {
-            PageHelper.startPage(page, pageSize);
-            List<Orders> orders = orderMapper.selectByDate(date);
-            if (orders.isEmpty()) break;
-            
-            processBatch(orders); // 分批处理
-            PageHelper.clearPage();
-            page++;
-        }
-    }
-    private void processBatch(List<Orders> orders) {
-        // 这里可以添加具体的处理逻辑，例如打印订单信息
-        for (Orders order : orders) {
-            log.info("Processing order: {}", order);
-        }
-    }
    
     /**
      * 查询订单详情

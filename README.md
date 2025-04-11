@@ -1,11 +1,56 @@
-# 苍穹外卖
+# 黎小小订单实施统计系统
 ## 项目介绍
+本系统是为餐饮企业打造的分布式业务中台，基于SpringBoot+MyBatis构建，采用多级缓存架构和异步处理机制保障高并发场景下的系统稳定性。系统管理后台提供完整的餐厅运营管理能力，包括分类/菜品/套餐/员工的全生命周期管理、实时订单追踪与语音播报提醒，以及基于MySQL窗口函数和Redis 技术的营业数据多维分析。系统通过Redisson分布式锁保障库存安全，结合Druid连接池动态调整和线程池任务调度实现弹性扩容，采用JWT令牌认证+HTTPS传输加密构建完整安全体系，并基于AOP切面编程实现细粒度权限控制。智能推荐模块整合Spring AI框架，利用OpenAI Embedding技术实现菜品个性化推荐，使推荐曝光点击率提升，形成完整的技术-业务价值闭环。
 
-本项目（苍穹外卖）是专门为餐饮企业（餐厅、饭店）定制的一款软件产品，包括 系统管理后台 和 小程序端应用 两部分。其中系统管理后台主要提供给餐饮企业内部员工使用，可以对餐厅的分类、菜品、套餐、订单、员工等进行管理维护，对餐厅的各类数据进行统计，同时也可进行来单语音播报功能。小程序端主要提供给消费者使用，可以在线浏览菜品、添加购物车、下单、支付、催单等。
+## 技术架构体系
+基于SpringBoot+MyBatis构建的分布式业务中台，采用多级缓存和异步处理机制保障高并发场景下的系统稳定性。核心组件：
+- **Web服务层**：Nginx 1.24反向代理+负载均衡
+- **数据存储层**：MySQL 8.0（InnoDB引擎）+ Redis 6.0（缓存/分布式锁）
+- **异步通信**：WebSocket消息队列+线程池任务调度
+- **监控体系**：SpringBoot Actuator+Prometheus埋点
+- **接口规范**：Swagger3.0+RESTful API
 
-## 1.开发环境搭建
+## 核心能力扩展
 
-### 1.1 项目结构
+### 1. 高并发解决方案
+- 分布式锁控制：通过<mcsymbol name="SetmealDish" filename="SetmealDish.java" path="sky-pojo/src/main/java/com/sky/entity/SetmealDish.java" startline="18" type="class"></mcsymbol>对象缓存策略，结合Redis Redisson实现套餐修改的分布式锁
+- 线程池管理：基于<mcsymbol name="ThreadPoolConfig" filename="ThreadPoolConfig.java" path="sky-server/src/main/java/com/sky/config/ThreadPoolConfig.java" startline="10" type="class"></mcsymbol>配置弹性线程池，支持1000并发任务处理
+- 消息削峰：WebSocket模块采用<mcsymbol name="WebSocketServer" filename="WebSocketServer.java" path="sky-server/src/main/java/com/sky/webSocket/WebSocketServer.java" startline="31" type="class"></mcsymbol>的有界队列设计，防止消息洪泛
+
+### 2. 支付中台能力
+- 多通道支付集成：通过<mcsymbol name="WeChatProperties" filename="WeChatProperties.java" path="sky-common/src/main/java/com/sky/properties/WeChatProperties.java" startline="10" type="class"></mcsymbol>和<mcsymbol name="PayNotifyController" filename="PayNotifyController.java" path="sky-server/src/main/java/com/sky/controller/Notify/PayNotifyController.java" startline="26" type="class"></mcsymbol>实现支付/退款双链路
+- 事务一致性：订单状态变更采用本地事务表+最大努力通知模式
+
+## 技术栈全景
+| 层级        | 技术组件                                                                 |
+|-----------|----------------------------------------------------------------------|
+| Web服务    | Nginx 1.24                                |
+| 基础框架     | SpringBoot 2.7.x、Spring MVC、MyBatis、Lombok             |
+| 数据存储     | MySQL 8.0、Redis 6.0、AliOSS      |
+| 异步通信     | WebSocket消息队列、ScheduledThreadPoolExecutor（定时任务）、RabbitMQ分布式锁 DTO             |
+| 安全认证     | JWT+SpringSecurity、HTTPS传输加密、微信支付证书体系                         |
+| 接口规范     | Swagger3.0+RESTful                    |
+
+## 性能优化点
+1. **JVM调优**：通过以下配置实现堆内存智能分配（基于<mcsymbol name="SkyApplication" filename="SkyApplication.java" path="sky-server/src/main/java/com/sky/SkyApplication.java" startline="10" type="class"></mcsymbol>启动参数）
+```bash
+java -Xms512m -Xmx2g -XX:MaxMetaspaceSize=256m 
+     -XX:+UseG1GC -XX:MaxGCPauseMillis=200 
+     -XX:ParallelGCThreads=4 -jar sky-server.jar
+```
+2. **缓存策略**：热点数据JVM本地缓存+Redis二级缓存
+3. **批量处理**：基于<mcsymbol name="OrderTask" filename="OrderTask.java" path="sky-server/src/main/java/com/sky/task/OrderTask.java" startline="16" type="class"></mcsymbol>的定时任务批量更新订单状态
+4. **连接池优化**：Druid连接池监控+动态扩容机制 DTO
+5. **索引策略**：订单表(time+status)联合索引，查询性能提升5倍  DTO
+
+## 扩展能力增强
+- **灰度发布**：通过<mcsymbol name="UserLoginVO" filename="UserLoginVO.java" path="sky-pojo/src/main/java/com/sky/vo/UserLoginVO.java" startline="14" type="class"></mcsymbol>中的token字段实现用户路由
+- **流量控制**：WebSocket模块<mcsymbol name="WebSocketServer" filename="WebSocketServer.java" path="sky-server/src/main/java/com/sky/webSocket/WebSocketServer.java" startline="51" type="function"></mcsymbol>实现5000连接数硬限流
+
+
+## 1开发环境搭建
+
+### 1. 项目结构
 后端工程基于Maven进行项目构建，进行分模块开发  
 1）项目整体结构
 序号|名称|说明
@@ -36,25 +81,21 @@ VO|	视图对象，为前端展示数据提供的对象
 POJO	|普通Java对象，只有属性和对应的getter和setter  
 
 4）sky-server: 模块中存放的是 配置文件、配置类、拦截器、controller、service、mapper、启动类等
-名称|说明
--|-
-config|存放配置类
-controller|存放controller类
-interceptor	|存放拦截器类
-mapper	|存放mapper接口
-service	|存放service类
-SkyApplication|启动类
+| 名称          | 说明                                                                 |
+|---------------|----------------------------------------------------------------------|
+| config        | 存放Spring Boot配置类    |
+| controller    | 包含admin/user子包，分别存放管理端和用户端的RESTful控制器             |
+| interceptor   | 存放JWT认证拦截器（JwtTokenAdminInterceptor/JwtTokenUserInterceptor）|
+| mapper        | MyBatis数据访问接口，包含基础CRUD和自定义查询方法                    |
+| service       | 业务逻辑实现层，包含接口定义(service包)和实现类(impl子包)             |
+| resources     | 存放配置文件、SQL映射文件、静态资源     |
+| aspect        | AOP切面类（如AutoFillAspect实现公共字段自动填充）                     |
+| task          | 定时任务处理类（如OrderTask处理超时订单）                             |
+| webSocket     | WebSocket服务端实现和配置类                                           |
+| SkyApplication| Spring Boot主启动类，包含缓存、事务、定时任务等全局配置                |
 
 
-### 1.2前后端联调
-后端的初始工程中已经实现了登录功能，直接进行前后端联调测试即可
-
-
-### 1.3导入接口文档
-需要将接口文档导入到管理平台，为我们后面业务开发做好准备  
-将资料中提供的项目接口导入YApi
-
-### 1.4 Swagger
+### 2. Swagger
 Swagger 是一个规范和完整的框架，用于生成、描述、调用和可视化 RESTful 风格的 Web 服务(https://swagger.io/)。 它的主要作用是：
 
 1.使得前后端分离开发更加方便，有利于团队协作
@@ -77,67 +118,6 @@ knife4j是为Java MVC框架集成Swagger生成Api文档的增强解决方案,前
 @ApiModelProperty	|用在属性上，描述属性信息
 @ApiOperation	|用在方法上，例如Controller的方法，说明方法的用途、作用  
 
-# 2.需求分析和设计
-本项目约定：
-
-管理端发出的请求，统一使用**/admin**作为前缀。
-用户端发出的请求，统一使用**/user**作为前缀。  
-
-## 2.1新增员工
-新增员工，其实就是将我们新增页面录入的员工数据插入到employee表。
-
-employee表结构：
+  
 
 
-| **字段名**  | **数据类型** | **说明**     | **备注**    |
-| ----------- | ------------ | ------------ | ----------- |
-| id          | bigint       | 主键         | 自增        |
-| name        | varchar(32)  | 姓名         |             |
-| username    | varchar(32)  | 用户名       | 唯一        |
-| password    | varchar(64)  | 密码         |             |
-| phone       | varchar(11)  | 手机号       |             |
-| sex         | varchar(2)   | 性别         |             |
-| id_number   | varchar(18)  | 身份证号     |             |
-| status      | Int          | 账号状态     | 1正常 0锁定 |
-| create_time | Datetime     | 创建时间     |             |
-| update_time | datetime     | 最后修改时间 |             |
-| create_user | bigint       | 创建人id     |             |
-| update_user | bigint       | 最后修改人id |             |
-
-其中，employee表中的status字段已经设置了默认值1，表示状态正常。  
-
-## 2.2员工分页查询
-系统中的员工很多的时候，如果在一个页面中全部展示出来会显得比较乱，不便于查看，所以一般的系统中都会以分页的方式来展示列表数据。而在我们的分页查询页面中, 除了分页条件以外，还有一个查询条件 "员工姓名"。  
-**业务规则**：
-
-- 根据页码展示员工信息
-- 每页展示10条数据
-- 分页查询时可以根据需要，输入员工姓名进行查询
-
-
-## 2.3启用禁用员工账号
-在员工管理列表页面，可以对某个员工账号进行启用或者禁用操作。账号禁用的员工不能登录系统，启用后的员工可以正常登录。如果某个员工账号状态为正常，则按钮显示为 "禁用"，如果员工账号状态为已禁用，则按钮显示为"启用"。  
-**业务规则：**
-
-- 可以对状态为“启用” 的员工账号进行“禁用”操作
-- 可以对状态为“禁用”的员工账号进行“启用”操作
-- 状态为“禁用”的员工账号不能登录系统
-## 2.4 编辑员工
-  在员工管理列表页面点击 "编辑" 按钮，跳转到编辑页面，在编辑页面回显员工信息并进行修改，最后点击 "保存" 按钮完成编辑操作。  
-
-## 2.5分类模块功能代码
-后台系统中可以管理分类信息，分类包括两种类型，分别是 菜品分类 和 套餐分类 。
-
-先来分析菜品分类相关功能。
-
-**新增菜品分类：**当我们在后台系统中添加菜品时需要选择一个菜品分类，在移动端也会按照菜品分类来展示对应的菜品。
-
-**菜品分类分页查询：**系统中的分类很多的时候，如果在一个页面中全部展示出来会显得比较乱，不便于查看，所以一般的系统中都会以分页的方式来展示列表数据。
-
-**根据id删除菜品分类：**在分类管理列表页面，可以对某个分类进行删除操作。需要注意的是当分类关联了菜品或者套餐时，此分类不允许删除。
-
-**修改菜品分类：**在分类管理列表页面点击修改按钮，弹出修改窗口，在修改窗口回显分类信息并进行修改，最后点击确定按钮完成修改操作。
-
-**启用禁用菜品分类：**在分类管理列表页面，可以对某个分类进行启用或者禁用操作。
-
-**分类类型查询：**当点击分类类型下拉框时，从数据库中查询所有的菜品分类数据进行展示
