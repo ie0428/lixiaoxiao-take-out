@@ -87,4 +87,13 @@ public interface OrderMapper {
      */
     @Select("select * from orders where order_time >=#{begin} and order_time <=#{end}")
     List<Orders> selectByDate(LocalDate date);
+
+    /**
+     * 根据订单号查询订单信息
+     *
+     * @param orderNumber 订单号
+     * @return 订单对象
+     */
+    @Select("SELECT * FROM orders WHERE number = #{orderNumber}")
+    Orders getByNumber(String orderNumber);
 }

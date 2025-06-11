@@ -1,13 +1,17 @@
 package com.sky.controller.Notify;
 
 import com.alibaba.druid.support.json.JSONUtils;
-import com.alibaba.fastjson.JSON;
-import com.alibaba.fastjson.JSONObject;
+import com.alibaba.fastjson2.JSON;
+import com.alibaba.fastjson2.JSONObject;
+import com.sky.entity.Orders;
+import com.sky.mapper.OrderMapper;
 import com.sky.properties.WeChatProperties;
 import com.sky.service.OrderService;
 import com.wechat.pay.contrib.apache.httpclient.util.AesUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.http.entity.ContentType;
+import org.redisson.api.RLock;
+import org.redisson.api.RedissonClient;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
@@ -16,6 +20,7 @@ import javax.servlet.http.HttpServletResponse;
 import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 支付回调相关接口
@@ -27,7 +32,11 @@ public class PayNotifyController {
     @Autowired
     private OrderService orderService;
     @Autowired
+    private OrderMapper orderMapper;
+    @Autowired
     private WeChatProperties weChatProperties;
+    @Autowired
+    private RedissonClient redissonClient;
 
     /**
      * 支付成功回调
@@ -47,15 +56,33 @@ public class PayNotifyController {
         JSONObject jsonObject = JSON.parseObject(plainText);
         String outTradeNo = jsonObject.getString("out_trade_no");//商户平台订单号
         String transactionId = jsonObject.getString("transaction_id");//微信支付交易号
-
+        String orderNumber = jsonObject.getString("out_trade_no");//合并重复的的订单号获取
         log.info("商户平台订单号：{}", outTradeNo);
         log.info("微信支付交易号：{}", transactionId);
-
+        RLock lock = redissonClient.getLock("PAY_CALLBACK_LOCK:" + orderNumber);
+        try {
+            if (lock.tryLock(3, 15, TimeUnit.SECONDS)) {
+                Orders order = orderMapper.getByNumber(orderNumber);
+                if (order == null || order.getStatus() != Orders.PENDING_PAYMENT) {
+                    responseToWeixin(response); // 确保返回响应
+                    return;
+                }
+                
         //业务处理，修改订单状态、来单提醒
         orderService.paySuccess(outTradeNo);
 
         //给微信响应
         responseToWeixin(response);
+            }
+        } catch (InterruptedException e) {
+            log.error("支付回调处理异常", e);
+        response.setStatus(500); // 异常状态码
+        } finally {
+            if (lock.isHeldByCurrentThread()) {
+                lock.unlock();
+            }
+        }
+
     }
 
     /**

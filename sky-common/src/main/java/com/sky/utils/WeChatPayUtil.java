@@ -1,7 +1,7 @@
 package com.sky.utils;
 
-import com.alibaba.fastjson.JSONObject;
-import org.apache.commons.lang.RandomStringUtils;
+import com.alibaba.fastjson2.JSONObject;
+import org.apache.commons.lang3.RandomStringUtils;
 import org.springframework.stereotype.Component;
 
 import java.math.BigDecimal;

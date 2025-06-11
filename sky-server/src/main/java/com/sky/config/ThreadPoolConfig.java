@@ -7,7 +7,10 @@ import java.util.concurrent.TimeUnit;
 
 
 @Configuration
+//@RefreshScope
 public class ThreadPoolConfig {
+    
+
     @Bean(name = "boundedThreadPool")
     public ThreadPoolExecutor boundedThreadPool() {
         return new ThreadPoolExecutor(

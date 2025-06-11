@@ -7,13 +7,14 @@ import com.sky.result.PageResult;
 import com.sky.result.Result;
 import com.sky.service.DishService;
 import com.sky.vo.DishVO;
-import io.swagger.annotations.Api;
-import io.swagger.annotations.ApiOperation;
+import io.swagger.v3.oas.annotations.Operation;
+import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.RedisTemplate;
 import org.springframework.web.bind.annotation.*;
-
+import org.redisson.api.RReadWriteLock;
+import org.redisson.api.RedissonClient;
 import java.util.List;
 import java.util.Set;
 
@@ -23,29 +24,34 @@ import java.util.Set;
 @RestController
 @Slf4j
 @RequestMapping("/admin/dish")
-@Api(tags = "菜品相关接口")
+@Tag(name = "菜品相关接口")
 public class DishController {
     @Autowired
     private DishService dishService;
     @Autowired
     private RedisTemplate redisTemplate;
+    @Autowired
+    private RedissonClient redissonClient; // 新增Redisson客户端注入
 
         /**
-         * 新增菜品
+         * 新增菜品（写操作）
          * @param dishDTO
          * @return
          */
     @PostMapping
-    @ApiOperation("新增菜品")
+    @Operation(summary = "新增菜品")
     public Result save(@RequestBody DishDTO dishDTO){
         log.info("新增菜品");
-        dishService.saveWithFlavor(dishDTO);
-
-        //清理分类下菜品缓存数据
-        String key="dish_"+dishDTO.getCategoryId();
-        cleanCache(key);
-        return Result.success();
-
+        RReadWriteLock rwLock = redissonClient.getReadWriteLock("dishLock");
+        try {
+            rwLock.writeLock().lock();  // 获取写锁
+            dishService.saveWithFlavor(dishDTO);
+            cleanCache("dish_*");// 清理所有菜品的缓存数据
+            return Result.success();
+        } finally {
+            rwLock.writeLock().unlock();  // 释放写锁
+        }
+        
     }
 
     /**
@@ -54,7 +60,7 @@ public class DishController {
      * @return
      */
     @GetMapping("/page")
-    @ApiOperation("菜品分页查询")
+    @Operation(summary = "菜品分页查询")
     public Result<PageResult> pageQuery(DishPageQueryDTO dishPageQueryDTO){
         log.info("菜品分页查询");
         PageResult pageResult = dishService.pageQuery(dishPageQueryDTO);
@@ -67,15 +73,18 @@ public class DishController {
      */
 
     @DeleteMapping
-    @ApiOperation("菜品批量删除")
+    @Operation(summary = "菜品批量删除")
     public Result delete(@RequestParam List<Long> ids){
         log.info("菜品批量删除");
-        dishService.deleteBatach(ids);
-
-        //清理所有菜品的缓存数据
-        cleanCache("dish_*");
-
-        return Result.success();
+        RReadWriteLock rwLock = redissonClient.getReadWriteLock("dishLock");
+        try {
+            rwLock.writeLock().lock();
+            dishService.deleteBatach(ids);
+            cleanCache("dish_*");
+            return Result.success();
+        } finally {
+            rwLock.writeLock().unlock();
+        }
     }
 
     /**
@@ -84,7 +93,7 @@ public class DishController {
      * @return
      */
     @GetMapping("/{id}")
-    @ApiOperation("根据id查询菜品")
+    @Operation(summary = "根据id查询菜品")
     public Result<DishVO> getById(@PathVariable Long id){
         log.info("根据id查询菜品");
         DishVO dishVO = dishService.getByIdWithFlavor(id);
@@ -97,15 +106,18 @@ public class DishController {
      */
 
     @PutMapping
-    @ApiOperation("修改菜品")
+    @Operation(summary = "修改菜品")
     public Result update(@RequestBody DishDTO dishDTO){
         log.info("修改菜品");
-        dishService.updateWithFlavor(dishDTO);
-
-        //清理所有菜品的缓存数据
-        cleanCache("dish_*");
-
-        return Result.success();
+        RReadWriteLock rwLock = redissonClient.getReadWriteLock("dishLock");
+        try {
+            rwLock.writeLock().lock();
+            dishService.updateWithFlavor(dishDTO);
+            cleanCache("dish_*");
+            return Result.success();
+        } finally {
+            rwLock.writeLock().unlock();
+        }
     }
 
     /**
@@ -115,17 +127,18 @@ public class DishController {
      * @return
      */
     @PostMapping("/status/{status}")
-    @ApiOperation("菜品起售停售")
+    @Operation(summary = "菜品起售停售")
     public Result startOrStop(@PathVariable Integer status,Long id){
         log.info("菜品起售停售");
-        dishService.startOrStop(status,id);
-
-        // 清理所有菜品的缓存数据
-        cleanCache("dish_*");
-
-
-        return Result.success();
-
+        RReadWriteLock rwLock = redissonClient.getReadWriteLock("dishLock");
+        try {
+            rwLock.writeLock().lock();
+            dishService.startOrStop(status,id);
+            cleanCache("dish_*");
+            return Result.success();
+        } finally {
+            rwLock.writeLock().unlock();
+        }
     }
 
     /**
@@ -134,10 +147,16 @@ public class DishController {
      * @return
      */
     @GetMapping("/list")
-    @ApiOperation("根据分类id查询菜品")
+    @Operation(summary = "根据分类id查询菜品")
     public Result<List<Dish>> list(Long categoryId){
-        List<Dish> list = dishService.list(categoryId);
-        return Result.success(list);
+        RReadWriteLock rwLock = redissonClient.getReadWriteLock("dishLock");
+        try {
+            rwLock.readLock().lock();  // 获取读锁
+            List<Dish> list = dishService.list(categoryId);
+            return Result.success(list);
+        } finally {
+            rwLock.readLock().unlock();  // 释放读锁
+        }
     }
 
     /**
